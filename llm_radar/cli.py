@@ -12,8 +12,6 @@ Commands:
 
 import argparse
 import sys
-import os
-import json
 
 
 def _get_storage(db_path=None):
@@ -182,8 +180,8 @@ def cmd_serve(args):
         sys.exit(1)
 
     app = FastAPI(title="LLM Radar")
-    radar = LLMRadar(app, db_path=args.db, dashboard_path="/__llm_radar")
-    print(_bold(f"\n📡 LLM Radar server starting"))
+    _radar = LLMRadar(app, db_path=args.db, dashboard_path="/__llm_radar")
+    print(_bold("\n📡 LLM Radar server starting"))
     print(f"  Dashboard → http://localhost:{args.port}/__llm_radar\n")
     uvicorn.run(app, host=args.host, port=args.port)
 
