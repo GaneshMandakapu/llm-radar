@@ -66,6 +66,10 @@ packages = ["llm_radar"]
 [tool.hatch.build.targets.sdist]
 include = ["/llm_radar", "/README.md", "/LICENSE"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+
 [tool.ruff]
 line-length = 100
 target-version = "py38"
