@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Radar</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d2e;
+      --surface2: #252840;
+      --border: #2e3250;
+      --accent: #6c63ff;
+      --accent2: #00d4aa;
+      --text: #e2e8f0;
+      --text-muted: #8892aa;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+
+    /* Layout */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+    .logo-icon { width: 32px; height: 32px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .badge { background: var(--accent); color: white; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.5px; }
+    .refresh-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+    .refresh-btn:hover { background: var(--border); }
+
+    main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+    /* Stat cards */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .stat-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; line-height: 1; }
+    .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    .stat-card.accent-green .stat-value { color: var(--accent2); }
+    .stat-card.accent-purple .stat-value { color: var(--accent); }
+    .stat-card.accent-yellow .stat-value { color: var(--warning); }
+    .stat-card.accent-red .stat-value { color: var(--error); }
+
+    /* Charts row */
+    .charts-row { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .card-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 16px; }
+    .chart-wrap { position: relative; height: 200px; }
+
+    /* Filters */
+    .filters {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filters select, .filters input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    .filters select:focus, .filters input:focus { border-color: var(--accent); }
+    .filter-label { font-size: 12px; color: var(--text-muted); }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 11px 12px; vertical-align: middle; }
+    .provider-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .provider-openai { background: #1a3a1a; color: #4ade80; }
+    .provider-anthropic { background: #2a1a0a; color: #fb923c; }
+    .provider-unknown { background: var(--surface2); color: var(--text-muted); }
+    .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; }
+    .status-success .status-dot { background: var(--success); }
+    .status-error .status-dot { background: var(--error); }
+    .prompt-preview { color: var(--text-muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .latency { font-variant-numeric: tabular-nums; }
+    .latency.slow { color: var(--warning); }
+    .latency.fast { color: var(--accent2); }
+    .cost { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+    /* Pagination */
+    .pagination { display: flex; align-items: center; gap: 10px; margin-top: 16px; justify-content: flex-end; }
+    .page-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 7px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .page-btn:disabled { opacity: 0.4; cursor: default; }
+    .page-info { font-size: 12px; color: var(--text-muted); }
+
+    /* Empty state */
+    .empty { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+    .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+    /* Loading */
+    .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+    /* Model breakdown */
+    .model-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .model-table td { padding: 7px 4px; border-bottom: 1px solid var(--border); }
+    .model-table tr:last-child td { border: none; }
+    .model-bar { height: 4px; background: var(--accent); border-radius: 2px; margin-top: 3px; }
+
+    @media (max-width: 768px) {
+      .charts-row { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📡</div>
+    LLM Radar
+    <span class="badge">LIVE</span>
+  </div>
+  <button class="refresh-btn" onclick="loadAll()">
+    <span>↻</span> Refresh
+  </button>
+</header>
+
+<main>
+  <!-- Stat Cards -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-label">Total Calls</div><div class="stat-value" id="s-calls">—</div></div>
+    <div class="stat-card accent-purple"><div class="stat-label">Total Tokens</div><div class="stat-value" id="s-tokens">—</div></div>
+    <div class="stat-card accent-green"><div class="stat-label">Total Cost</div><div class="stat-value" id="s-cost">—</div><div class="stat-sub">USD</div></div>
+    <div class="stat-card accent-yellow"><div class="stat-label">Avg Latency</div><div class="stat-value" id="s-latency">—</div><div class="stat-sub">ms</div></div>
+    <div class="stat-card accent-red"><div class="stat-label">Errors</div><div class="stat-value" id="s-errors">—</div></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-title">Calls &amp; Cost — Last 24h</div>
+      <div class="chart-wrap"><canvas id="timeline-chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">By Model</div>
+      <div id="model-breakdown"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <!-- Calls Table -->
+  <div class="card">
+    <div class="card-title">Recent Calls</div>
+    <div class="filters">
+      <span class="filter-label">Provider:</span>
+      <select id="f-provider" onchange="loadCalls()">
+        <option value="">All</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <span class="filter-label">Status:</span>
+      <select id="f-status" onchange="loadCalls()">
+        <option value="">All</option>
+        <option value="success">Success</option>
+        <option value="error">Error</option>
+      </select>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Provider</th>
+            <th>Model</th>
+            <th>Prompt</th>
+            <th>Tokens In</th>
+            <th>Tokens Out</th>
+            <th>Cost</th>
+            <th>Latency</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="calls-body">
+          <tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button class="page-btn" id="prev-btn" onclick="prevPage()" disabled>← Prev</button>
+      <span class="page-info" id="page-info">Page 1</span>
+      <button class="page-btn" id="next-btn" onclick="nextPage()">Next →</button>
+    </div>
+  </div>
+</main>
+
+<script>
+  const BASE = window.location.pathname.replace(/\/$/, '');
+  let timelineChart = null;
+  let currentPage = 0;
+  const PAGE_SIZE = 50;
+
+  function fmt(n, digits=2) {
+    if (n === null || n === undefined) return '—';
+    if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return Number(n).toFixed(digits);
+  }
+
+  function fmtCost(v) {
+    if (!v) return '$0.00';
+    if (v < 0.0001) return '<$0.0001';
+    return '$' + v.toFixed(4);
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+  }
+
+  async function fetchJSON(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(r.statusText);
+    return r.json();
+  }
+
+  async function loadStats() {
+    try {
+      const data = await fetchJSON(BASE + '/api/stats');
+      const t = data.totals;
+      document.getElementById('s-calls').textContent = fmt(t.calls, 0);
+      document.getElementById('s-tokens').textContent = fmt(t.tokens, 0);
+      document.getElementById('s-cost').textContent = fmtCost(t.cost_usd);
+      document.getElementById('s-latency').textContent = fmt(t.avg_latency_ms, 0);
+      document.getElementById('s-errors').textContent = fmt(t.errors, 0);
+
+      renderTimeline(data.timeline);
+      renderModelBreakdown(data.by_model);
+    } catch(e) {
+      console.error('Stats load error', e);
+    }
+  }
+
+  function renderTimeline(timeline) {
+    const labels = timeline.map(r => {
+      const d = new Date(r.hour);
+      return d.getHours() + ':00';
+    });
+    const callsData = timeline.map(r => r.calls);
+    const costData = timeline.map(r => r.cost_usd);
+
+    if (timelineChart) timelineChart.destroy();
+
+    const ctx = document.getElementById('timeline-chart').getContext('2d');
+    timelineChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Calls',
+            data: callsData,
+            backgroundColor: 'rgba(108, 99, 255, 0.7)',
+            borderRadius: 4,
+            yAxisID: 'y',
+          },
+          {
+            label: 'Cost ($)',
+            data: costData,
+            type: 'line',
+            borderColor: '#00d4aa',
+            backgroundColor: 'rgba(0, 212, 170, 0.1)',
+            borderWidth: 2,
+            pointRadius: 3,
+            fill: true,
+            tension: 0.3,
+            yAxisID: 'y2',
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { labels: { color: '#8892aa', font: { size: 11 } } } },
+        scales: {
+          x: { grid: { color: '#2e3250' }, ticks: { color: '#8892aa', font: { size: 10 } } },
+          y: { grid: { color: '#2e3250' }, ticks: { color: '#8892aa', font: { size: 10 } }, position: 'left' },
+          y2: { grid: { display: false }, ticks: { color: '#00d4aa', font: { size: 10 } }, position: 'right' },
+        }
+      }
+    });
+  }
+
+  function renderModelBreakdown(models) {
+    if (!models || models.length === 0) {
+      document.getElementById('model-breakdown').innerHTML = '<div class="empty" style="padding:20px"><div class="empty-icon">🤖</div><div>No data yet</div></div>';
+      return;
+    }
+    const maxCalls = Math.max(...models.map(m => m.calls), 1);
+    const rows = models.slice(0, 8).map(m => `
+      <tr>
+        <td>
+          <div style="font-weight:600;color:var(--text)">${m.model}</div>
+          <span class="provider-badge provider-${m.provider}">${m.provider}</span>
+        </td>
+        <td style="text-align:right">
+          <div style="font-weight:600">${fmt(m.calls,0)}</div>
+          <div style="color:var(--text-muted);font-size:11px">${fmtCost(m.cost_usd)}</div>
+          <div class="model-bar" style="width:${Math.round((m.calls/maxCalls)*100)}%"></div>
+        </td>
+      </tr>
+    `).join('');
+    document.getElementById('model-breakdown').innerHTML = `<table class="model-table">${rows}</table>`;
+  }
+
+  async function loadCalls() {
+    const provider = document.getElementById('f-provider').value;
+    const status = document.getElementById('f-status').value;
+    const offset = currentPage * PAGE_SIZE;
+
+    let url = `${BASE}/api/calls?limit=${PAGE_SIZE}&offset=${offset}`;
+    if (provider) url += `&provider=${provider}`;
+    if (status) url += `&status=${status}`;
+
+    const tbody = document.getElementById('calls-body');
+    tbody.innerHTML = '<tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr>';
+
+    try {
+      const data = await fetchJSON(url);
+      const calls = data.calls;
+
+      if (calls.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📡</div><div>No calls recorded yet.<br>Make an LLM API call to see it here.</div></div></td></tr>`;
+        document.getElementById('next-btn').disabled = true;
+      } else {
+        tbody.innerHTML = calls.map(c => {
+          const latencyClass = c.latency_ms > 3000 ? 'slow' : c.latency_ms < 500 ? 'fast' : '';
+          const statusClass = c.status === 'error' ? 'status-error' : 'status-success';
+          const providerClass = `provider-${c.provider || 'unknown'}`;
+          const errTitle = c.error_message ? ` title="${c.error_message.replace(/"/g,'&quot;')}"` : '';
+          return `<tr>
+            <td style="white-space:nowrap;color:var(--text-muted)">${fmtTime(c.created_at)}</td>
+            <td><span class="provider-badge ${providerClass}">${c.provider || '?'}</span></td>
+            <td style="font-family:monospace;font-size:12px">${c.model || '?'}</td>
+            <td class="prompt-preview" title="${(c.prompt_preview||'').replace(/"/g,'&quot;')}">${c.prompt_preview || '—'}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(c.input_tokens,0)}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(c.output_tokens,0)}</td>
+            <td class="cost">${fmtCost(c.cost_usd)}</td>
+            <td class="latency ${latencyClass}">${fmt(c.latency_ms,0)}ms</td>
+            <td class="${statusClass}"${errTitle}><span class="status-dot"></span>${c.status}</td>
+          </tr>`;
+        }).join('');
+        document.getElementById('next-btn').disabled = calls.length < PAGE_SIZE;
+      }
+
+      document.getElementById('prev-btn').disabled = currentPage === 0;
+      document.getElementById('page-info').textContent = `Page ${currentPage + 1}`;
+    } catch(e) {
+      tbody.innerHTML = `<tr><td colspan="9" style="color:var(--error);padding:20px">Error loading calls: ${e.message}</td></tr>`;
+    }
+  }
+
+  function prevPage() { if (currentPage > 0) { currentPage--; loadCalls(); } }
+  function nextPage() { currentPage++; loadCalls(); }
+
+  async function loadAll() {
+    await Promise.all([loadStats(), loadCalls()]);
+  }
+
+  // Auto-refresh every 10s
+  loadAll();
+  setInterval(loadAll, 10000);
+</script>
+</body>
+</html>
