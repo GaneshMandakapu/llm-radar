@@ -1,6 +1,8 @@
 let allCalls = [];
 let currentTab = "calls";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fmt(n, digits = 0) {
   if (n == null) return "—";
   if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
@@ -27,13 +29,13 @@ function providerPill(provider) {
 
 function showTab(tab) {
   currentTab = tab;
-  document.getElementById("calls-tab").style.display = tab === "calls" ? "" : "none";
-  document.getElementById("stats-tab").style.display = tab === "stats" ? "" : "none";
+  document.getElementById("calls-tab").style.display   = tab === "calls"    ? "" : "none";
+  document.getElementById("stats-tab").style.display   = tab === "stats"    ? "" : "none";
   document.getElementById("settings-panel").style.display = tab === "settings" ? "" : "none";
-  document.getElementById("detail-panel").style.display = "none";
+  document.getElementById("detail-panel").style.display   = "none";
 
-  ["calls", "stats", "settings"].forEach((t) => {
-    document.getElementById(`tab-${t}`)?.classList.toggle("active", t === tab);
+  ["calls", "stats", "settings"].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle("active", t === tab);
   });
 
   if (tab === "stats") renderStats();
@@ -45,34 +47,35 @@ function showTab(tab) {
 function renderCalls(calls) {
   const list = document.getElementById("call-list");
   if (!calls.length) {
-    list.innerHTML = `<div class="empty"><div class="empty-icon">📡</div>No LLM calls detected yet.<br>Make an API call on this page.</div>`;
+    list.innerHTML = `<div class="empty"><div class="empty-icon">📡</div>No LLM calls detected yet.<br>Send a message on ChatGPT, Claude.ai, or any page using LLM APIs.</div>`;
     return;
   }
 
-  list.innerHTML = calls
-    .slice(0, 100)
-    .map((c, i) => {
-      const latencyColor = c.latencyMs > 3000 ? "style='color:var(--warning)'" : "";
-      const statusIcon = c.status === "error"
-        ? `<span class="status-err">✗</span>`
-        : `<span class="status-ok">✓</span>`;
+  list.innerHTML = calls.slice(0, 100).map((c, i) => {
+    const latColor = c.latencyMs > 3000 ? "style='color:var(--warning)'" : "";
+    const statusIcon = c.status === "error"
+      ? `<span class="status-err">✗</span>`
+      : `<span class="status-ok">✓</span>`;
+    return `<div class="call-item" data-idx="${i}">
+      <div class="call-top">
+        ${providerPill(c.provider)}
+        <span class="model-name">${c.model || "?"}</span>
+        ${statusIcon}
+        <span style="font-size:11px;color:var(--muted)">${fmtTime(c.timestamp)}</span>
+      </div>
+      <div class="call-meta">
+        <span class="call-cost">${fmtCost(c.costUsd)}</span>
+        <span ${latColor}>${fmt(c.latencyMs)}ms</span>
+        <span>${fmt((c.inputTokens || 0) + (c.outputTokens || 0))} tokens</span>
+      </div>
+      ${c.promptPreview ? `<div class="call-prompt">${c.promptPreview.slice(0, 60).replace(/</g, "&lt;")}</div>` : ""}
+    </div>`;
+  }).join("");
 
-      return `<div class="call-item" onclick="showDetail(${i})">
-        <div class="call-top">
-          ${providerPill(c.provider)}
-          <span class="model-name">${c.model || "?"}</span>
-          ${statusIcon}
-          <span style="font-size:11px;color:var(--muted)">${fmtTime(c.timestamp)}</span>
-        </div>
-        <div class="call-meta">
-          <span class="call-cost">${fmtCost(c.costUsd)}</span>
-          <span ${latencyColor}>${fmt(c.latencyMs)}ms</span>
-          <span>${fmt((c.inputTokens || 0) + (c.outputTokens || 0))} tokens</span>
-        </div>
-        ${c.promptPreview ? `<div class="call-prompt">${c.promptPreview.slice(0, 60).replace(/</g, "&lt;")}</div>` : ""}
-      </div>`;
-    })
-    .join("");
+  // Wire click handlers after render
+  list.querySelectorAll(".call-item").forEach(el => {
+    el.addEventListener("click", () => showDetail(parseInt(el.dataset.idx)));
+  });
 }
 
 // ── Detail ────────────────────────────────────────────────────────────────────
@@ -82,8 +85,7 @@ function showDetail(idx) {
   if (!c) return;
 
   document.getElementById("calls-tab").style.display = "none";
-  const panel = document.getElementById("detail-panel");
-  panel.style.display = "block";
+  document.getElementById("detail-panel").style.display = "block";
 
   const rows = [
     ["Provider", providerPill(c.provider)],
@@ -96,9 +98,7 @@ function showDetail(idx) {
     ["Cost", `<span style="color:var(--accent2)">${fmtCost(c.costUsd)}</span>`],
   ];
 
-  if (c.errorMessage) {
-    rows.push(["Error", `<span style="color:var(--error)">${c.errorMessage.slice(0, 200)}</span>`]);
-  }
+  if (c.errorMessage) rows.push(["Error", `<span style="color:var(--error)">${c.errorMessage.slice(0, 200)}</span>`]);
 
   let html = rows.map(([k, v]) => `
     <div class="detail-row">
@@ -127,8 +127,7 @@ function closeDetail() {
 
 function renderStats() {
   chrome.runtime.sendMessage({ type: "get_stats" }, ({ stats }) => {
-    const grid = document.getElementById("stats-grid");
-    grid.innerHTML = `
+    document.getElementById("stats-grid").innerHTML = `
       <div class="stat purple"><div class="stat-val">${fmt(stats.totalCalls)}</div><div class="stat-lbl">Calls</div></div>
       <div class="stat green"><div class="stat-val">${fmtCost(stats.totalCost)}</div><div class="stat-lbl">Cost</div></div>
       <div class="stat red"><div class="stat-val">${fmt(stats.errors)}</div><div class="stat-lbl">Errors</div></div>
@@ -138,21 +137,15 @@ function renderStats() {
     `;
 
     const modelRows = document.getElementById("model-rows");
-    if (!stats.byModel?.length) {
-      modelRows.innerHTML = "";
-      return;
-    }
-    modelRows.innerHTML = stats.byModel
-      .slice(0, 6)
-      .map((m) => `
-        <div class="model-row">
-          <div class="model-info">
-            <div class="model-name-sm">${m.model}</div>
-            <div class="model-stats">${providerPill(m.provider)} · ${fmt(m.calls)} calls · ${fmt(m.tokens)} tokens</div>
-          </div>
-          <div class="model-cost">${fmtCost(m.cost)}</div>
-        </div>`)
-      .join("");
+    if (!stats.byModel?.length) { modelRows.innerHTML = ""; return; }
+    modelRows.innerHTML = stats.byModel.slice(0, 6).map(m => `
+      <div class="model-row">
+        <div class="model-info">
+          <div class="model-name-sm">${m.model}</div>
+          <div class="model-stats">${providerPill(m.provider)} · ${fmt(m.calls)} calls · ${fmt(m.tokens)} tokens</div>
+        </div>
+        <div class="model-cost">${fmtCost(m.cost)}</div>
+      </div>`).join("");
   });
 }
 
@@ -169,14 +162,16 @@ function loadSettings() {
 }
 
 function saveSettings() {
-  const settings = {
-    forwardToServer: document.getElementById("s-forward").checked,
-    serverUrl: document.getElementById("s-server-url").value,
-    trackOpenAI: document.getElementById("s-openai").checked,
-    trackAnthropic: document.getElementById("s-anthropic").checked,
-    trackGemini: document.getElementById("s-gemini").checked,
-  };
-  chrome.runtime.sendMessage({ type: "save_settings", settings });
+  chrome.runtime.sendMessage({
+    type: "save_settings",
+    settings: {
+      forwardToServer: document.getElementById("s-forward").checked,
+      serverUrl: document.getElementById("s-server-url").value,
+      trackOpenAI: document.getElementById("s-openai").checked,
+      trackAnthropic: document.getElementById("s-anthropic").checked,
+      trackGemini: document.getElementById("s-gemini").checked,
+    },
+  });
 }
 
 // ── Clear ─────────────────────────────────────────────────────────────────────
@@ -188,7 +183,7 @@ function clearCalls() {
   });
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
+// ── Refresh ───────────────────────────────────────────────────────────────────
 
 function refresh() {
   chrome.runtime.sendMessage({ type: "get_calls" }, ({ calls }) => {
@@ -198,5 +193,27 @@ function refresh() {
   });
 }
 
-refresh();
-setInterval(refresh, 2000);
+// ── Event wiring (NO inline handlers) ────────────────────────────────────────
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Tab clicks
+  document.querySelectorAll(".tab[data-tab]").forEach(el => {
+    el.addEventListener("click", () => showTab(el.dataset.tab));
+  });
+
+  // Header buttons
+  document.getElementById("btn-clear").addEventListener("click", clearCalls);
+  document.getElementById("btn-settings").addEventListener("click", () => showTab("settings"));
+  document.getElementById("btn-back").addEventListener("click", closeDetail);
+
+  // Settings inputs
+  document.getElementById("s-forward").addEventListener("change", saveSettings);
+  document.getElementById("s-server-url").addEventListener("change", saveSettings);
+  document.getElementById("s-openai").addEventListener("change", saveSettings);
+  document.getElementById("s-anthropic").addEventListener("change", saveSettings);
+  document.getElementById("s-gemini").addEventListener("change", saveSettings);
+
+  // Initial load
+  refresh();
+  setInterval(refresh, 2000);
+});
