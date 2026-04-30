@@ -7,6 +7,17 @@ from typing import Optional
 import duckdb
 
 
+CREATE_AB_TESTS_SQL = """
+CREATE TABLE IF NOT EXISTS ab_tests (
+    id          VARCHAR PRIMARY KEY,
+    name        VARCHAR,
+    variants    JSON NOT NULL,
+    winner_cost VARCHAR,
+    winner_latency VARCHAR,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+"""
+
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS llm_calls (
     id          VARCHAR PRIMARY KEY,
@@ -50,6 +61,7 @@ class LLMStorage:
             self._conn = duckdb.connect(":memory:")
 
         self._conn.execute(CREATE_TABLE_SQL)
+        self._conn.execute(CREATE_AB_TESTS_SQL)
 
     def record(
         self,
@@ -184,3 +196,60 @@ class LLMStorage:
                 for r in timeline
             ],
         }
+
+    def record_ab_test(self, ab_result):
+        import json
+        winner_cost = ab_result.winner_by_cost
+        winner_latency = ab_result.winner_by_latency
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO ab_tests (id, name, variants, winner_cost, winner_latency) VALUES (?, ?, ?, ?, ?)",
+                [
+                    ab_result.test_id,
+                    ab_result.name,
+                    json.dumps([
+                        {
+                            "label": v.label, "provider": v.provider, "model": v.model,
+                            "input_tokens": v.input_tokens, "output_tokens": v.output_tokens,
+                            "cost_usd": v.cost_usd, "latency_ms": round(v.latency_ms, 2),
+                            "status": v.status, "error": v.error_message,
+                            "response_preview": v.response_text[:300] if v.response_text else None,
+                        }
+                        for v in ab_result.variants
+                    ]),
+                    winner_cost.label if winner_cost else None,
+                    winner_latency.label if winner_latency else None,
+                ],
+            )
+
+    def get_ab_tests(self, limit: int = 50, offset: int = 0):
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM ab_tests ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                [limit, offset],
+            ).fetchall()
+            cols = [d[0] for d in self._conn.description]
+        result = []
+        for row in rows:
+            r = dict(zip(cols, row))
+            r["created_at"] = str(r["created_at"])
+            result.append(r)
+        return result
+
+    def export_calls(self, fmt: str = "json") -> str:
+        import json, csv, io
+        calls = self.get_calls(limit=10000)
+        for c in calls:
+            if c.get("created_at"):
+                c["created_at"] = str(c["created_at"])
+        if fmt == "json":
+            return json.dumps(calls, indent=2)
+        elif fmt == "csv":
+            if not calls:
+                return ""
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=calls[0].keys())
+            writer.writeheader()
+            writer.writerows(calls)
+            return buf.getvalue()
+        raise ValueError(f"Unknown format: {fmt}")

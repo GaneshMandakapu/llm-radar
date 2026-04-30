@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Radar</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d2e;
+      --surface2: #252840;
+      --border: #2e3250;
+      --accent: #6c63ff;
+      --accent2: #00d4aa;
+      --text: #e2e8f0;
+      --muted: #8892aa;
+      --success: #22c55e;
+      --error: #ef4444;
+      --warning: #f59e0b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 420px;
+      min-height: 500px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 13px;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+    .logo-icon { font-size: 18px; }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--accent2);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .header-actions { display: flex; gap: 6px; }
+    .btn-sm {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .btn-sm:hover { background: var(--border); }
+    .btn-sm.danger { color: var(--error); border-color: var(--error); }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      padding: 12px;
+    }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px; text-align: center; }
+    .stat-val { font-size: 20px; font-weight: 700; }
+    .stat-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 3px; }
+    .stat.green .stat-val { color: var(--accent2); }
+    .stat.purple .stat-val { color: var(--accent); }
+    .stat.red .stat-val { color: var(--error); }
+
+    /* Call list */
+    .call-list { padding: 0 10px 10px; overflow-y: auto; max-height: 330px; }
+    .call-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      margin-bottom: 6px;
+      cursor: pointer;
+    }
+    .call-item:hover { border-color: var(--accent); }
+    .call-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+    .provider-pill {
+      font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .pill-openai { background: #1a3a1a; color: #4ade80; }
+    .pill-anthropic { background: #2a1a0a; color: #fb923c; }
+    .pill-gemini { background: #1a2a3a; color: #60a5fa; }
+    .pill-ollama { background: #1a1a2a; color: #a78bfa; }
+    .model-name { font-size: 12px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .call-meta { display: flex; gap: 8px; font-size: 11px; color: var(--muted); }
+    .call-cost { color: var(--accent2); font-weight: 600; }
+    .call-prompt { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; }
+    .status-ok { color: var(--success); }
+    .status-err { color: var(--error); }
+
+    /* Detail panel */
+    #detail-panel { padding: 12px; display: none; }
+    #detail-panel.visible { display: block; }
+    .detail-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+    .detail-key { color: var(--muted); min-width: 110px; }
+    .detail-val { flex: 1; word-break: break-word; }
+    .detail-text { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; white-space: pre-wrap; word-break: break-word; max-height: 100px; overflow-y: auto; }
+    .back-btn { color: var(--accent); cursor: pointer; font-size: 12px; margin-bottom: 10px; display: inline-block; }
+
+    /* Settings */
+    #settings-panel { padding: 12px; display: none; }
+    #settings-panel.visible { display: block; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .setting-row:last-child { border: none; }
+    .setting-label { font-size: 12px; }
+    .setting-sub { font-size: 11px; color: var(--muted); }
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+    input[type="text"] {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-size: 12px;
+      width: 180px;
+      outline: none;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-icon { font-size: 36px; opacity: 0.4; margin-bottom: 8px; }
+
+    /* Model breakdown in stats tab */
+    .model-rows { padding: 0 12px 12px; }
+    .model-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .model-row:last-child { border: none; }
+    .model-info { flex: 1; }
+    .model-name-sm { font-size: 12px; font-weight: 600; }
+    .model-stats { font-size: 11px; color: var(--muted); }
+    .model-cost { font-size: 12px; color: var(--accent2); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-icon">📡</span>
+    LLM Radar
+    <div class="live-dot"></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-sm danger" onclick="clearCalls()">Clear</button>
+    <button class="btn-sm" onclick="showTab('settings')">⚙</button>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" id="tab-calls" onclick="showTab('calls')">Calls</div>
+  <div class="tab" id="tab-stats" onclick="showTab('stats')">Stats</div>
+  <div class="tab" id="tab-settings" onclick="showTab('settings')">Settings</div>
+</div>
+
+<!-- Calls tab -->
+<div id="calls-tab">
+  <div class="call-list" id="call-list"></div>
+</div>
+
+<!-- Detail panel (overlays calls tab) -->
+<div id="detail-panel">
+  <span class="back-btn" onclick="closeDetail()">← Back</span>
+  <div id="detail-content"></div>
+</div>
+
+<!-- Stats tab -->
+<div id="stats-tab" style="display:none">
+  <div class="stats-grid" id="stats-grid"></div>
+  <div class="model-rows" id="model-rows"></div>
+</div>
+
+<!-- Settings tab -->
+<div id="settings-panel" style="display:none">
+  <div class="setting-row">
+    <div>
+      <div class="setting-label">Forward to local server</div>
+      <div class="setting-sub">Send calls to llm-radar Python server</div>
+    </div>
+    <input type="checkbox" id="s-forward" onchange="saveSettings()" />
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">Server URL</div>
+    <input type="text" id="s-server-url" value="http://localhost:8765" onchange="saveSettings()" />
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">Track OpenAI</div>
+    <input type="checkbox" id="s-openai" checked onchange="saveSettings()" />
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">Track Anthropic</div>
+    <input type="checkbox" id="s-anthropic" checked onchange="saveSettings()" />
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">Track Gemini</div>
+    <input type="checkbox" id="s-gemini" checked onchange="saveSettings()" />
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
