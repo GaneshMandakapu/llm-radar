@@ -39,9 +39,10 @@
       match: u => u.includes("generativelanguage.googleapis.com"),
       provider: "gemini", format: "gemini_direct",
     },
-    // ChatGPT web app
+    // ChatGPT web app (backend-api = logged in, backend-anon = temporary chat)
     {
-      match: u => (u.includes("chatgpt.com") || u.includes("chat.openai.com")) && u.includes("conversation"),
+      match: u => (u.includes("chatgpt.com") || u.includes("chat.openai.com")) &&
+                  (u.includes("conversation") || u.includes("backend-api") || u.includes("backend-anon")),
       provider: "openai", format: "chatgpt_stream",
     },
     // Claude.ai web app
@@ -197,6 +198,7 @@
   }
 
   // ── Main fetch override ──────────────────────────────────────────────────
+  console.log("[LLM Radar] injector active ✓");
   const origFetch = window.fetch;
   window.fetch = async function (input, init) {
     const url = typeof input === "string" ? input : (input?.url || "");
