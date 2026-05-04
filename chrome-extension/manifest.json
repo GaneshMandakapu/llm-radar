@@ -5,7 +5,6 @@
   "description": "Real-time LLM call monitor. Tracks OpenAI, Anthropic, Gemini calls — tokens, cost, latency.",
   "permissions": [
     "storage",
-    "declarativeNetRequest",
     "webRequest",
     "tabs",
     "scripting"
