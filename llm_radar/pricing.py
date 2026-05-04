@@ -24,17 +24,38 @@ PRICING: dict[str, tuple[float, float]] = {
 }
 
 
-def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def calculate_cost_and_savings(model: str, input_tokens: int, output_tokens: int, cached_tokens: int = 0) -> tuple[float, float]:
     model_lower = model.lower()
+
+    input_cost, output_cost = 0.0, 0.0
 
     # Exact match
     if model_lower in PRICING:
         input_cost, output_cost = PRICING[model_lower]
-        return (input_tokens * input_cost + output_tokens * output_cost) / 1_000_000
+    else:
+        # Prefix match
+        for key, (ic, oc) in PRICING.items():
+            if model_lower.startswith(key):
+                input_cost, output_cost = ic, oc
+                break
 
-    # Prefix match — handles versioned model names like "gpt-4o-2024-11-20"
-    for key, (input_cost, output_cost) in PRICING.items():
-        if model_lower.startswith(key):
-            return (input_tokens * input_cost + output_tokens * output_cost) / 1_000_000
+    if input_cost == 0.0 and output_cost == 0.0:
+        return 0.0, 0.0
 
-    return 0.0
+    # Cache discount estimation
+    # OpenAI is exactly 50% discount for cached input tokens
+    # Anthropic is typically 90% discount for cached input tokens (e.g. $3.00 -> $0.30 for Sonnet)
+    discount_factor = 0.9 if "claude" in model_lower else 0.5
+
+    base_input_cost = (input_tokens + cached_tokens) * input_cost / 1_000_000
+    base_output_cost = output_tokens * output_cost / 1_000_000
+
+    savings = (cached_tokens * input_cost * discount_factor) / 1_000_000
+    actual_cost = base_input_cost + base_output_cost - savings
+
+    return actual_cost, savings
+
+def calculate_cost(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Legacy wrapper for backward compatibility."""
+    cost, _ = calculate_cost_and_savings(model, input_tokens, output_tokens, 0)
+    return cost

@@ -25,8 +25,10 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     model       VARCHAR NOT NULL,
     input_tokens  INTEGER DEFAULT 0,
     output_tokens INTEGER DEFAULT 0,
+    cached_tokens INTEGER DEFAULT 0,
     total_tokens  INTEGER DEFAULT 0,
     cost_usd    DOUBLE DEFAULT 0.0,
+    savings_usd DOUBLE DEFAULT 0.0,
     latency_ms  DOUBLE DEFAULT 0.0,
     status      VARCHAR DEFAULT 'success',
     error_message VARCHAR,
@@ -63,13 +65,25 @@ class LLMStorage:
         self._conn.execute(CREATE_TABLE_SQL)
         self._conn.execute(CREATE_AB_TESTS_SQL)
 
+        # Apply schema migrations for older databases safely
+        try:
+            self._conn.execute("ALTER TABLE llm_calls ADD COLUMN cached_tokens INTEGER DEFAULT 0;")
+        except Exception:
+            pass
+        try:
+            self._conn.execute("ALTER TABLE llm_calls ADD COLUMN savings_usd DOUBLE DEFAULT 0.0;")
+        except Exception:
+            pass
+
     def record(
         self,
         provider: str,
         model: str,
         input_tokens: int = 0,
         output_tokens: int = 0,
+        cached_tokens: int = 0,
         cost_usd: float = 0.0,
+        savings_usd: float = 0.0,
         latency_ms: float = 0.0,
         status: str = "success",
         error_message: Optional[str] = None,
@@ -85,14 +99,14 @@ class LLMStorage:
             self._conn.execute(
                 """
                 INSERT INTO llm_calls
-                    (id, provider, model, input_tokens, output_tokens, total_tokens,
-                     cost_usd, latency_ms, status, error_message,
+                    (id, provider, model, input_tokens, output_tokens, cached_tokens, total_tokens,
+                     cost_usd, savings_usd, latency_ms, status, error_message,
                      prompt_preview, response_preview, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 [
-                    call_id, provider, model, input_tokens, output_tokens, total_tokens,
-                    cost_usd, latency_ms, status, error_message,
+                    call_id, provider, model, input_tokens, output_tokens, cached_tokens, total_tokens,
+                    cost_usd, savings_usd, latency_ms, status, error_message,
                     prompt_preview, response_preview,
                     json.dumps(metadata) if metadata else None,
                 ],
@@ -145,7 +159,9 @@ class LLMStorage:
                 SELECT
                     COUNT(*) as total_calls,
                     SUM(total_tokens) as total_tokens,
+                    SUM(cached_tokens) as total_cached_tokens,
                     SUM(cost_usd) as total_cost_usd,
+                    SUM(savings_usd) as total_savings_usd,
                     AVG(latency_ms) as avg_latency_ms,
                     SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as error_count
                 FROM llm_calls
@@ -182,9 +198,11 @@ class LLMStorage:
             "totals": {
                 "calls": totals[0] or 0,
                 "tokens": totals[1] or 0,
-                "cost_usd": round(totals[2] or 0, 6),
-                "avg_latency_ms": round(totals[3] or 0, 2),
-                "errors": totals[4] or 0,
+                "cached_tokens": totals[2] or 0,
+                "cost_usd": round(totals[3] or 0, 6),
+                "savings_usd": round(totals[4] or 0, 6),
+                "avg_latency_ms": round(totals[5] or 0, 2),
+                "errors": totals[6] or 0,
             },
             "by_model": [
                 {"model": r[0], "provider": r[1], "calls": r[2], "tokens": r[3],

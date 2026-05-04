@@ -45,3 +45,20 @@ class TestCalculateCost:
         for model in PRICING:
             cost = calculate_cost(model, input_tokens=1000, output_tokens=1000)
             assert cost > 0, f"Expected non-zero cost for model {model}"
+
+    def test_prompt_caching_savings(self):
+        from llm_radar.pricing import calculate_cost_and_savings
+        
+        # OpenAI discount is 50%
+        # gpt-4o input cost is $2.50
+        # 1M cached tokens should cost $1.25, and save $1.25
+        cost, savings = calculate_cost_and_savings("gpt-4o", input_tokens=0, output_tokens=0, cached_tokens=1_000_000)
+        assert cost == pytest.approx(1.25)
+        assert savings == pytest.approx(1.25)
+
+        # Anthropic discount is 90%
+        # claude-3-5-sonnet input cost is $3.00
+        # 1M cached tokens should cost $0.30, and save $2.70
+        cost, savings = calculate_cost_and_savings("claude-3-5-sonnet", input_tokens=0, output_tokens=0, cached_tokens=1_000_000)
+        assert cost == pytest.approx(0.30)
+        assert savings == pytest.approx(2.70)

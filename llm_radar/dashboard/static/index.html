@@ -191,8 +191,8 @@
   <!-- Stat Cards -->
   <div class="stats-grid" id="stats-grid">
     <div class="stat-card"><div class="stat-label">Total Calls</div><div class="stat-value" id="s-calls">—</div></div>
-    <div class="stat-card accent-purple"><div class="stat-label">Total Tokens</div><div class="stat-value" id="s-tokens">—</div></div>
-    <div class="stat-card accent-green"><div class="stat-label">Total Cost</div><div class="stat-value" id="s-cost">—</div><div class="stat-sub">USD</div></div>
+    <div class="stat-card accent-purple"><div class="stat-label">Total Tokens</div><div class="stat-value" id="s-tokens">—</div><div class="stat-sub">Cached: <span id="s-cached">—</span></div></div>
+    <div class="stat-card accent-green"><div class="stat-label">Total Cost</div><div class="stat-value" id="s-cost">—</div><div class="stat-sub">USD (Saved: <span id="s-savings" style="color:var(--accent2)">$0.00</span>)</div></div>
     <div class="stat-card accent-yellow"><div class="stat-label">Avg Latency</div><div class="stat-value" id="s-latency">—</div><div class="stat-sub">ms</div></div>
     <div class="stat-card accent-red"><div class="stat-label">Errors</div><div class="stat-value" id="s-errors">—</div></div>
   </div>
@@ -235,14 +235,16 @@
             <th>Model</th>
             <th>Prompt</th>
             <th>Tokens In</th>
+            <th>Cached In</th>
             <th>Tokens Out</th>
             <th>Cost</th>
+            <th>Saved</th>
             <th>Latency</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody id="calls-body">
-          <tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr>
+          <tr><td colspan="11" class="loading"><div class="spinner"></div></td></tr>
         </tbody>
       </table>
     </div>
@@ -292,7 +294,9 @@
       const t = data.totals;
       document.getElementById('s-calls').textContent = fmt(t.calls, 0);
       document.getElementById('s-tokens').textContent = fmt(t.tokens, 0);
+      document.getElementById('s-cached').textContent = fmt(t.cached_tokens || 0, 0);
       document.getElementById('s-cost').textContent = fmtCost(t.cost_usd);
+      document.getElementById('s-savings').textContent = fmtCost(t.savings_usd || 0);
       document.getElementById('s-latency').textContent = fmt(t.avg_latency_ms, 0);
       document.getElementById('s-errors').textContent = fmt(t.errors, 0);
 
@@ -386,14 +390,14 @@
     if (status) url += `&status=${status}`;
 
     const tbody = document.getElementById('calls-body');
-    tbody.innerHTML = '<tr><td colspan="9" class="loading"><div class="spinner"></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="loading"><div class="spinner"></div></td></tr>';
 
     try {
       const data = await fetchJSON(url);
       const calls = data.calls;
 
       if (calls.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div class="empty-icon">📡</div><div>No calls recorded yet.<br>Make an LLM API call to see it here.</div></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11"><div class="empty"><div class="empty-icon">📡</div><div>No calls recorded yet.<br>Make an LLM API call to see it here.</div></div></td></tr>`;
         document.getElementById('next-btn').disabled = true;
       } else {
         tbody.innerHTML = calls.map(c => {
@@ -407,8 +411,10 @@
             <td style="font-family:monospace;font-size:12px">${c.model || '?'}</td>
             <td class="prompt-preview" title="${(c.prompt_preview||'').replace(/"/g,'&quot;')}">${c.prompt_preview || '—'}</td>
             <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(c.input_tokens,0)}</td>
+            <td style="text-align:right;font-variant-numeric:tabular-nums;color:var(--accent2)">${fmt(c.cached_tokens || 0, 0)}</td>
             <td style="text-align:right;font-variant-numeric:tabular-nums">${fmt(c.output_tokens,0)}</td>
             <td class="cost">${fmtCost(c.cost_usd)}</td>
+            <td class="cost" style="color:var(--accent2)">${fmtCost(c.savings_usd || 0)}</td>
             <td class="latency ${latencyClass}">${fmt(c.latency_ms,0)}ms</td>
             <td class="${statusClass}"${errTitle}><span class="status-dot"></span>${c.status}</td>
           </tr>`;
@@ -419,7 +425,7 @@
       document.getElementById('prev-btn').disabled = currentPage === 0;
       document.getElementById('page-info').textContent = `Page ${currentPage + 1}`;
     } catch(e) {
-      tbody.innerHTML = `<tr><td colspan="9" style="color:var(--error);padding:20px">Error loading calls: ${e.message}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" style="color:var(--error);padding:20px">Error loading calls: ${e.message}</td></tr>`;
     }
   }
 
