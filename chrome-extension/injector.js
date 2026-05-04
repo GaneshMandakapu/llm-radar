@@ -50,10 +50,15 @@
       match: u => u.includes("claude.ai") && (u.includes("completion") || u.includes("messages")),
       provider: "anthropic", format: "claude_ai_stream",
     },
-    // Gemini web app (aistudio, gemini.google.com)
+    // Gemini web app (aistudio)
     {
-      match: u => (u.includes("gemini.google.com") || u.includes("aistudio.google.com")) && u.includes("generate"),
+      match: u => u.includes("aistudio.google.com") && u.includes("generate"),
       provider: "gemini", format: "gemini_stream",
+    },
+    // Gemini consumer app (gemini.google.com)
+    {
+      match: u => u.includes("gemini.google.com") && u.includes("batchexecute"),
+      provider: "gemini", format: "gemini_batchexecute",
     },
   ];
 
@@ -242,8 +247,21 @@
         });
 
       } else {
-        // Non-streaming — clone + parse JSON
+        // Non-streaming — clone
         const clone = response.clone();
+        
+        if (endpoint.format === "gemini_batchexecute") {
+          clone.text().then(text => {
+            emit({
+              provider: "gemini", model: "gemini-web",
+              inputTokens: 0, outputTokens: 0, costUsd: 0, latencyMs, status: "success",
+              promptPreview: "Gemini Web UI Prompt", responsePreview: "Gemini Web UI Response",
+              timestamp: Date.now(),
+            });
+          }).catch(() => {});
+          return response;
+        }
+
         clone.json().then(data => {
           let parsed = { model: "unknown", inputTokens: 0, outputTokens: 0, responseText: "" };
           if (endpoint.format === "openai_direct") parsed = parseOpenAIDirect(data, reqBody);
