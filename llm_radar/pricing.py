@@ -47,7 +47,7 @@ def calculate_cost_and_savings(model: str, input_tokens: int, output_tokens: int
     # Anthropic is typically 90% discount for cached input tokens (e.g. $3.00 -> $0.30 for Sonnet)
     discount_factor = 0.9 if "claude" in model_lower else 0.5
 
-    base_input_cost = (input_tokens + cached_tokens) * input_cost / 1_000_000
+    base_input_cost = input_tokens * input_cost / 1_000_000
     base_output_cost = output_tokens * output_cost / 1_000_000
 
     savings = (cached_tokens * input_cost * discount_factor) / 1_000_000
